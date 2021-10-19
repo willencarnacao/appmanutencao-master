@@ -9,11 +9,11 @@ uses
 type
   TServidor = class
   private
-    FPath: AnsiString;
+    FPath: String;
   public
     constructor Create;
-    //Tipo do parâmetro não pode ser alterado
-    function SalvarArquivos(AData: OleVariant): Boolean;
+    // Tipo do parâmetro não pode ser alterado
+    function SalvarArquivos(AData: OleVariant; ANumeroPDF: Integer): Boolean;
   end;
 
   TfClienteServidor = class(TForm)
@@ -24,12 +24,14 @@ type
     procedure FormCreate(Sender: TObject);
     procedure btEnviarSemErrosClick(Sender: TObject);
     procedure btEnviarComErrosClick(Sender: TObject);
+    procedure btEnviarParaleloClick(Sender: TObject);
   private
-    FPath: AnsiString;
+    FPath: String;
     FServidor: TServidor;
 
     function InitDataset: TClientDataset;
   public
+    procedure CarregarProgressBar(iPosicao: Integer);
   end;
 
 var
@@ -47,45 +49,80 @@ uses
 
 procedure TfClienteServidor.btEnviarComErrosClick(Sender: TObject);
 var
-  cds: TClientDataset;
+  oArquivo: TClientDataset;
   i: Integer;
+  sNomeArquivo: string;
 begin
-  cds := InitDataset;
-  for i := 0 to QTD_ARQUIVOS_ENVIAR do
-  begin
-    cds.Append;
-    TBlobField(cds.FieldByName('Arquivo')).LoadFromFile(FPath);
-    cds.Post;
+  oArquivo := InitDataset;
+  oArquivo.Append;
+  TBlobField(oArquivo.FieldByName('Arquivo')).LoadFromFile(FPath);
+  oArquivo.Post;
+  ProgressBar.Max := QTD_ARQUIVOS_ENVIAR;
+  ProgressBar.Position := 0;
 
-    {$REGION Simulação de erro, não alterar}
-    if i = (QTD_ARQUIVOS_ENVIAR/2) then
-      FServidor.SalvarArquivos(NULL);
-    {$ENDREGION}
+  try
+    for i := 1 to QTD_ARQUIVOS_ENVIAR do
+    begin
+      ProgressBar.Position := i;
+      {$REGION Simulação de erro, não alterar}
+      if i = (QTD_ARQUIVOS_ENVIAR/2) then
+        FServidor.SalvarArquivos(NULL, i)
+      else
+        FServidor.SalvarArquivos(oArquivo.Data, i);
+      {$ENDREGION}
+    end;
+  finally
+    if i < QTD_ARQUIVOS_ENVIAR then
+    begin
+      for I := 1 to QTD_ARQUIVOS_ENVIAR do
+      begin
+        sNomeArquivo := FServidor.FPath + i.ToString + '.pdf';
+        if TFile.Exists(sNomeArquivo) then
+          TFile.Delete(sNomeArquivo);
+      end;
+    end;
   end;
+end;
 
-  FServidor.SalvarArquivos(cds.Data);
+procedure TfClienteServidor.btEnviarParaleloClick(Sender: TObject);
+begin
+  { TODO : implementar }
 end;
 
 procedure TfClienteServidor.btEnviarSemErrosClick(Sender: TObject);
 var
-  cds: TClientDataset;
+  oArquivo: TClientDataset;
   i: Integer;
 begin
-  cds := InitDataset;
-  for i := 0 to QTD_ARQUIVOS_ENVIAR do
-  begin
-    cds.Append;
-    TBlobField(cds.FieldByName('Arquivo')).LoadFromFile(FPath);
-    cds.Post;
-  end;
+  oArquivo := InitDataset;
 
-  FServidor.SalvarArquivos(cds.Data);
+  try
+    oArquivo.Append;
+    TBlobField(oArquivo.FieldByName('Arquivo')).LoadFromFile(FPath);
+    oArquivo.Post;
+    ProgressBar.Max := QTD_ARQUIVOS_ENVIAR;
+    ProgressBar.Position := 0;
+
+    for i := 1 to QTD_ARQUIVOS_ENVIAR do
+    begin
+      ProgressBar.Position := i;
+      FServidor.SalvarArquivos(oArquivo.Data, i);
+    end;
+  finally
+    FreeAndNil(oArquivo);
+    ShowMessage('Processamento finalizado.');
+  end;
+end;
+
+procedure TfClienteServidor.CarregarProgressBar(iPosicao: Integer);
+begin
+  ProgressBar.Position := iPosicao;
 end;
 
 procedure TfClienteServidor.FormCreate(Sender: TObject);
 begin
   inherited;
-  FPath := IncludeTrailingBackslash(ExtractFilePath(ParamStr(0))) + 'pdf.pdf';
+  FPath := IncludeTrailingPathDelimiter(ExtractFilePath(ParamStr(0))) + 'pdf.pdf';
   FServidor := TServidor.Create;
 end;
 
@@ -103,36 +140,32 @@ begin
   FPath := ExtractFilePath(ParamStr(0)) + 'Servidor\';
 end;
 
-function TServidor.SalvarArquivos(AData: OleVariant): Boolean;
+function TServidor.SalvarArquivos(AData: OleVariant; ANumeroPDF: Integer): Boolean;
 var
   cds: TClientDataSet;
   FileName: string;
 begin
+  Result := False;
+
   try
     cds := TClientDataset.Create(nil);
     cds.Data := AData;
 
-    {$REGION Simulação de erro, não alterar}
+{$REGION Simulação de erro, não alterar}
     if cds.RecordCount = 0 then
       Exit;
-    {$ENDREGION}
-
+{$ENDREGION}
     cds.First;
 
-    while not cds.Eof do
-    begin
-      FileName := FPath + cds.RecNo.ToString + '.pdf';
-      if TFile.Exists(FileName) then
-        TFile.Delete(FileName);
+    FileName := FPath + ANumeroPDF.ToString + '.pdf';
+    if TFile.Exists(FileName) then
+      TFile.Delete(FileName);
 
-      TBlobField(cds.FieldByName('Arquivo')).SaveToFile(FileName);
-      cds.Next;
-    end;
+    TBlobField(cds.FieldByName('Arquivo')).SaveToFile(FileName);
 
     Result := True;
-  except
-    Result := False;
-    raise;
+  finally
+    FreeAndNil(cds);
   end;
 end;
 

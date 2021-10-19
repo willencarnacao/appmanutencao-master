@@ -13,6 +13,8 @@ type
     btStreams: TButton;
     procedure btDatasetLoopClick(Sender: TObject);
     procedure btStreamsClick(Sender: TObject);
+    procedure btThreadsClick(Sender: TObject);
+
   private
   public
   end;
@@ -23,7 +25,7 @@ var
 implementation
 
 uses
-  DatasetLoop, ClienteServidor;
+  DatasetLoop, ClienteServidor, Threads, Exceptions;
 
 {$R *.dfm}
 
@@ -35,6 +37,11 @@ end;
 procedure TfMain.btStreamsClick(Sender: TObject);
 begin
   fClienteServidor.Show;
+end;
+
+procedure TfMain.btThreadsClick(Sender: TObject);
+begin
+  fThreads.Show;
 end;
 
 end.
